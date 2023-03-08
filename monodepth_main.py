@@ -7,11 +7,13 @@
 # For any other use of the software not covered by the UCLB ACP-A Licence,
 # please contact info@uclb.com
 
+
+
 from __future__ import absolute_import, division, print_function
 
 # only keep warnings and errors
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL']='1'
+os.environ['TF_CPP_MIN_LOG_LEVEL']='5'
 
 import numpy as np
 import argparse
@@ -19,6 +21,8 @@ import re
 import time
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
+
+tf.disable_v2_behavior()
 
 from monodepth_model import *
 from monodepth_dataloader import *
@@ -64,10 +68,8 @@ def post_process_disparity(disp):
     return r_mask * l_disp + l_mask * r_disp + (1.0 - l_mask - r_mask) * m_disp
 
 def count_text_lines(file_path):
-    f = open(file_path, 'r')
-    lines = f.readlines()
-    f.close()
-    return len(lines)
+    with open(file_path, 'r') as f:
+        return len(f.readlines())
 
 def train(params):
     """Training loop."""
@@ -106,7 +108,6 @@ def train(params):
         with tf.variable_scope(tf.get_variable_scope()):
             for i in range(args.num_gpus):
                 with tf.device('/gpu:%d' % i):
-
                     model = MonodepthModel(params, args.mode, left_splits[i], right_splits[i], reuse_variables, i)
 
                     loss = model.total_loss
@@ -115,13 +116,10 @@ def train(params):
                     reuse_variables = True
 
                     grads = opt_step.compute_gradients(loss)
-
                     tower_grads.append(grads)
 
         grads = average_gradients(tower_grads)
-
         apply_gradient_op = opt_step.apply_gradients(grads, global_step=global_step)
-
         total_loss = tf.reduce_mean(tower_losses)
 
         tf.summary.scalar('learning_rate', learning_rate, ['model_0'])
@@ -131,9 +129,10 @@ def train(params):
         # SESSION
         config = tf.ConfigProto(allow_soft_placement=True)
         sess = tf.Session(config=config)
+        # sess = tf_debug.LocalCLIDebugWrapperSession(sess)
 
         # SAVER
-        summary_writer = tf.summary.FileWriter(args.log_directory + '/' + args.model_name, sess.graph)
+        summary_writer = tf.summary.FileWriter(os.path.join(args.log_directory, args.dataset), sess.graph)
         train_saver = tf.train.Saver()
 
         # COUNT PARAMS
@@ -150,8 +149,7 @@ def train(params):
 
         # LOAD CHECKPOINT IF SET
         if args.checkpoint_path != '':
-            train_saver.restore(sess, args.checkpoint_path.split(".")[0])
-
+            train_saver.restore(sess, args.checkpoint_path)
             if args.retrain:
                 sess.run(global_step.assign(0))
 
@@ -199,9 +197,9 @@ def test(params):
 
     # RESTORE
     if args.checkpoint_path == '':
-        restore_path = tf.train.latest_checkpoint(args.log_directory + '/' + args.model_name)
+        restore_path = tf.train.latest_checkpoint(os.path.join(args.log_directory, args.model_name))
     else:
-        restore_path = args.checkpoint_path.split(".")[0]
+        restore_path = args.checkpoint_path
     train_saver.restore(sess, restore_path)
 
     num_test_samples = count_text_lines(args.filenames_file)

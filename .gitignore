@@ -1,0 +1,6 @@
+bricks*/*
+models/*
+logs/*
+*.pyc
+.vscode/*
+__pycache__/*

@@ -19,7 +19,8 @@ import re
 import time
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
-import scipy.misc
+import imageio
+from skimage.transform import resize
 import matplotlib.pyplot as plt
 
 from monodepth_model import *
@@ -52,10 +53,14 @@ def test_simple(params):
     left  = tf.placeholder(tf.float32, [2, args.input_height, args.input_width, 3])
     model = MonodepthModel(params, "test", left, None)
 
-    input_image = scipy.misc.imread(args.image_path, mode="RGB")
+    input_image = imageio.imread(args.image_path, pilmode='RGB')
+    plt.figure('original')
+    plt.axis('off')
+    plt.imshow(input_image)
+
     original_height, original_width, num_channels = input_image.shape
-    input_image = scipy.misc.imresize(input_image, [args.input_height, args.input_width], interp='lanczos')
-    input_image = input_image.astype(np.float32) / 255
+    input_image = resize(input_image, [args.input_height, args.input_width])
+    input_image = input_image.astype(np.float32) / 255.0
     input_images = np.stack((input_image, np.fliplr(input_image)), 0)
 
     # SESSION
@@ -72,18 +77,22 @@ def test_simple(params):
     threads = tf.train.start_queue_runners(sess=sess, coord=coordinator)
 
     # RESTORE
-    restore_path = args.checkpoint_path.split(".")[0]
-    train_saver.restore(sess, restore_path)
+    train_saver.restore(sess, args.checkpoint_path)
 
     disp = sess.run(model.disp_left_est[0], feed_dict={left: input_images})
     disp_pp = post_process_disparity(disp.squeeze()).astype(np.float32)
 
-    output_directory = os.path.dirname(args.image_path)
-    output_name = os.path.splitext(os.path.basename(args.image_path))[0]
+    # output_directory = os.path.dirname(args.image_path)
+    # output_name = os.path.splitext(os.path.basename(args.image_path))[0]
+    # np.save(os.path.join(output_directory, "{}_disp.npy".format(output_name)), disp_pp)
 
-    np.save(os.path.join(output_directory, "{}_disp.npy".format(output_name)), disp_pp)
-    disp_to_img = scipy.misc.imresize(disp_pp.squeeze(), [original_height, original_width])
-    plt.imsave(os.path.join(output_directory, "{}_disp.png".format(output_name)), disp_to_img, cmap='plasma')
+    disp_to_img = resize(disp_pp.squeeze(), [original_height, original_width])
+    # plt.imsave(os.path.join(output_directory, "{}_disp.png".format(output_name)), disp_to_img, cmap='plasma')
+
+    plt.figure('depth heatmap')
+    plt.axis('off')
+    plt.imshow(disp_to_img, cmap='plasma')
+    plt.show()
 
     print('done!')
 

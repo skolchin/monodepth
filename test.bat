@@ -1,0 +1,1 @@
+python .\monodepth_simple.py --input_height 512 --input_width 512 --checkpoint_path ./models/bricks --image_path ./bricks.full/3002.png
